@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Shift - Physics Puzzle</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 3px solid #00ffea;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 255, 234, 0.3);
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: #0f3460;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+        }
+        
+        .control-btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: rgba(0, 255, 234, 0.2);
+            border: 2px solid #00ffea;
+            color: white;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .control-btn:hover {
+            background: rgba(0, 255, 234, 0.4);
+            transform: scale(1.05);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+        
+        #levelComplete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #00ffea;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            border: 3px solid #00ffea;
+            z-index: 100;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 200;
+        }
+        
+        h1 {
+            color: #00ffea;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ffea;
+        }
+        
+        #instructions {
+            margin: 20px 0 30px 0;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+        
+        #startBtn {
+            padding: 15px 40px;
+            font-size: 20px;
+            background: linear-gradient(45deg, #00ffea, #0083b0);
+            border: none;
+            color: white;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            letter-spacing: 2px;
+            transition: transform 0.3s;
+        }
+        
+        #startBtn:hover {
+            transform: scale(1.1);
+        }
+        
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="startScreen">
+        <h1>GRAVITY SHIFT</h1>
+        <div id="instructions">
+            <p>Navigate the blue ball to the green goal using gravity control!</p>
+            <p>🡹🡻🡸🡺 - Change gravity direction</p>
+            <p>Avoid red obstacles - Each hit costs 1 life</p>
+            <p>Collect yellow orbs for bonus points</p>
+            <p>Complete all 5 levels to win!</p>
+        </div>
+        <button id="startBtn">START GAME</button>
+    </div>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="ui">
+            <div>Level: <span id="levelDisplay">1</span>/5</div>
+            <div>Lives: <span id="livesDisplay">3</span></div>
+            <div>Score: <span id="scoreDisplay">0</span></div>
+            <div>Gravity: <span id="gravityDisplay">DOWN</span></div>
+        </div>
+        
+        <div id="controls">
+            <button class="control-btn" onclick="changeGravity('up')">↑ Up</button>
+            <button class="control-btn" onclick="changeGravity('down')">↓ Down</button>
+            <button class="control-btn" onclick="changeGravity('left')">← Left</button>
+            <button class="control-btn" onclick="changeGravity('right')">→ Right</button>
+        </div>
+        
+        <div id="levelComplete">
+            <h2>Level Complete!</h2>
+            <p id="levelScore">Score: 0</p>
+            <button class="control-btn" onclick="nextLevel()">Next Level</button>
+        </div>
+    </div>
+
+    <script>
+        // Game elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+        
+        // Game state
+        let gameRunning = false;
+        let currentLevel = 1;
+        let lives = 3;
+        let score = 0;
+        let gravity = { x: 0, y: 1 };
+        
+        // Game objects
+        let player = { x: 50, y: 300, radius: 15, color: '#00ffea' };
+        let goal = { x: 700, y: 300, radius: 25, color: '#00ff88' };
+        let obstacles = [];
+        let collectibles = [];
+        
+        // Create background stars
+        function createStars() {
+            const stars = [];
+            for (let i = 0; i < 50; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2 + 1,
+                    speed: Math.random() * 0.5 + 0.2
+                });
+            }
+            return stars;
+        }
+        
+        let stars = createStars();
+        
+        // Level designs
+        const levels = [
+            { // Level 1
+                obstacles: [
+                    { x: 300, y: 200, width: 200, height: 20 },
+                    { x: 400, y: 400, width: 200, height: 20 }
+                ],
+                collectibles: [
+                    { x: 150, y: 150, radius: 10 },
+                    { x: 600, y: 450, radius: 10 }
+                ]
+            },
+            { // Level 2
+                obstacles: [
+                    { x: 200, y: 150, width: 20, height: 300 },
+                    { x: 500, y: 200, width: 200, height: 20 },
+                    { x: 600, y: 400, width: 20, height: 200 }
+                ],
+                collectibles: [
+                    { x: 400, y: 100, radius: 10 },
+                    { x: 700, y: 100, radius: 10 },
+                    { x: 100, y: 500, radius: 10 }
+                ]
+            },
+            { // Level 3
+                obstacles: [
+                    { x: 150, y: 100, width: 500, height: 20 },
+                    { x: 150, y: 500, width: 500, height: 20 },
+                    { x: 350, y: 250, width: 20, height: 100 }
+                ],
+                collectibles: [
+                    { x: 100, y: 300, radius: 10 },
+                    { x: 700, y: 300, radius: 10 },
+                    { x: 400, y: 50, radius: 10 }
+                ]
+            },
+            { // Level 4
+                obstacles: [
+                    { x: 100, y: 200, width: 600, height: 20 },
+                    { x: 100, y: 400, width: 600, height: 20 },
+                    { x: 300, y: 150, width: 20, height: 100 },
+                    { x: 500, y: 450, width: 20, height: 100 }
+                ],
+                collectibles: [
+                    { x: 50, y: 50, radius: 10 },
+                    { x: 750, y: 50, radius: 10 },
+                    { x: 50, y: 550, radius: 10 },
+                    { x: 750, y: 550, radius: 10 }
+                ]
+            },
+            { // Level 5
+                obstacles: [
+                    { x: 200, y: 100, width: 400, height: 20 },
+                    { x: 200, y: 500, width: 400, height: 20 },
+                    { x: 100, y: 200, width: 20, height: 200 },
+                    { x: 680, y: 200, width: 20, height: 200 },
+                    { x: 400, y: 300, width: 20, height: 100 }
+                ],
+                collectibles: [
+                    { x: 400, y: 150, radius: 10 },
+                    { x: 400, y: 450, radius: 10 },
+                    { x: 150, y: 300, radius: 10 },
+                    { x: 650, y: 300, radius: 10 }
+                ]
+            }
+        ];
+        
+        // Initialize level
+        function initLevel(level) {
+            const levelData = levels[level - 1];
+            obstacles = levelData.obstacles;
+            collectibles = levelData.collectibles.map(c => ({ ...c, collected: false }));
+            
+            // Reset player position based on level
+            player.x = level === 1 ? 50 : 50;
+            player.y = level === 1 ? 300 : 300;
+            
+            // Position goal based on level
+            goal.x = level === 1 ? 700 : 700;
+            goal.y = level === 1 ? 300 : 300;
+        }
+        
+        // Draw functions
+        function drawStars() {
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(Date.now() * 0.001) * 0.3})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        function drawPlayer() {
+            ctx.shadowColor = player.color;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            // Draw gravity direction indicator
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.x + gravity.x * 30, player.y + gravity.y * 30);
+            ctx.stroke();
+        }
+        
+        function drawGoal() {
+            ctx.shadowColor = goal.color;
+            ctx.shadowBlur = 20;
+            ctx.fillStyle = goal.color;
+            ctx.beginPath();
+            ctx.arc(goal.x, goal.y, goal.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            
+            // Pulsing effect
+            const pulse = Math.sin(Date.now() * 0.005) * 5;
+            ctx.strokeStyle = goal.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(goal.x, goal.y, goal.radius + pulse, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        function drawObstacles() {
+            obstacles.forEach(obs => {
+                ctx.fillStyle = '#ff4444';
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                
+                // Add texture
+                ctx.fillStyle = '#ff0000';
+                for(let i = 0; i < obs.width; i += 10) {
+                    for(let j = 0; j < obs.height; j += 10) {
+                        if((i + j) % 20 === 0) {
+                            ctx.fillRect(obs.x + i, obs.y + j, 5, 5);
+                        }
+                    }
+                }
+            });
+        }
+        
+        function drawCollectibles() {
+            collectibles.forEach(collectible => {
+                if (!collectible.collected) {
+                    ctx.shadowColor = '#ffff00';
+                    ctx.shadowBlur = 10;
+                    ctx.fillStyle = '#ffff00';
+                    ctx.beginPath();
+                    ctx.arc(collectible.x, collectible.y, collectible.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    
+                    // Rotation effect
+                    ctx.strokeStyle = '#ffaa00';
+                    ctx.lineWidth = 2;
+                    const angle = Date.now() * 0.003;
+                    ctx.beginPath();
+                    ctx.arc(
+                        collectible.x + Math.cos(angle) * collectible.radius,
+                        collectible.y + Math.sin(angle) * collectible.radius,
+                        3, 0, Math.PI * 2
+                    );
+                    ctx.stroke();
+                }
+            });
+        }
+        
+        // Physics and collision
+        function updatePlayer() {
+            // Apply gravity
+            player.x += gravity.x * 2;
+            player.y += gravity.y * 2;
+            
+            // Boundary collision
+            if (player.x - player.radius < 0) player.x = player.radius;
+            if (player.x + player.radius > canvas.width) player.x = canvas.width - player.radius;
+            if (player.y - player.radius < 0) player.y = player.radius;
+            if (player.y + player.radius > canvas.height) player.y = canvas.height - player.radius;
+            
+            // Obstacle collision
+            obstacles.forEach(obs => {
+                if (player.x + player.radius > obs.x &&
+                    player.x - player.radius < obs.x + obs.width &&
+                    player.y + player.radius > obs.y &&
+                    player.y - player.radius < obs.y + obs.height) {
+                    
+                    // Bounce back
+                    player.x -= gravity.x * 5;
+                    player.y -= gravity.y * 5;
+                    
+                    // Lose life
+                    lives--;
+                    document.getElementById('livesDisplay').textContent = lives;
+                    
+                    // Shake effect
+                    canvas.style.transform = 'translateX(10px)';
+                    setTimeout(() => canvas.style.transform = 'translateX(0px)', 100);
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            });
+            
+            // Collectible collision
+            collectibles.forEach(collectible => {
+                if (!collectible.collected) {
+                    const dx = player.x - collectible.x;
+                    const dy = player.y - collectible.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < player.radius + collectible.radius) {
+                        collectible.collected = true;
+                        score += 100;
+                        document.getElementById('scoreDisplay').textContent = score;
+                        
+                        // Score popup
+                        const popup = document.createElement('div');
+                        popup.textContent = '+100';
+                        popup.style.position = 'absolute';
+                        popup.style.left = collectible.x + 'px';
+                        popup.style.top = collectible.y + 'px';
+                        popup.style.color = '#ffff00';
+                        popup.style.fontWeight = 'bold';
+                        popup.style.pointerEvents = 'none';
+                        document.getElementById('gameContainer').appendChild(popup);
+                        
+                        setTimeout(() => popup.remove(), 1000);
+                    }
+                }
+            });
+            
+            // Goal collision
+            const dx = player.x - goal.x;
+            const dy = player.y - goal.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < player.radius + goal.radius) {
+                levelComplete();
+            }
+        }
+        
+        // Game functions
+        function changeGravity(direction) {
+            switch(direction) {
+                case 'up':
+                    gravity = { x: 0, y: -1 };
+                    document.getElementById('gravityDisplay').textContent = 'UP';
+                    break;
+                case 'down':
+                    gravity = { x: 0, y: 1 };
+                    document.getElementById('gravityDisplay').textContent = 'DOWN';
+                    break;
+                case 'left':
+                    gravity = { x: -1, y: 0 };
+                    document.getElementById('gravityDisplay').textContent = 'LEFT';
+                    break;
+                case 'right':
+                    gravity = { x: 1, y: 0 };
+                    document.getElementById('gravityDisplay').textContent = 'RIGHT';
+                    break;
+            }
+        }
+        
+        function levelComplete() {
+            gameRunning = false;
+            document.getElementById('levelScore').textContent = `Score: ${score}`;
+            document.getElementById('levelComplete').style.display = 'block';
+        }
+        
+        function nextLevel() {
+            if (currentLevel < 5) {
+                currentLevel++;
+                document.getElementById('levelDisplay').textContent = currentLevel;
+                document.getElementById('levelComplete').style.display = 'none';
+                initLevel(currentLevel);
+                gameRunning = true;
+                gameLoop();
+            } else {
+                gameWin();
+            }
+        }
+        
+        function gameWin() {
+            alert(`Congratulations! You won the game!\nFinal Score: ${score}`);
+            resetGame();
+        }
+        
+        function gameOver() {
+            alert(`Game Over! Final Score: ${score}`);
+            resetGame();
+        }
+        
+        function resetGame() {
+            gameRunning = false;
+            currentLevel = 1;
+            lives = 3;
+            score = 0;
+            document.getElementById('levelDisplay').textContent = '1';
+            document.getElementById('livesDisplay').textContent = '3';
+            document.getElementById('scoreDisplay').textContent = '0';
+            document.getElementById('gravityDisplay').textContent = 'DOWN';
+            document.getElementById('levelComplete').style.display = 'none';
+            startScreen.style.display = 'flex';
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update stars
+            stars.forEach(star => {
+                star.y += star.speed;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            });
+            
+            // Draw and update game
+            drawStars();
+            updatePlayer();
+            drawObstacles();
+            drawCollectibles();
+            drawGoal();
+            drawPlayer();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            
+            switch(e.key) {
+                case 'ArrowUp':
+                    changeGravity('up');
+                    break;
+                case 'ArrowDown':
+                    changeGravity('down');
+                    break;
+                case 'ArrowLeft':
+                    changeGravity('left');
+                    break;
+                case 'ArrowRight':
+                    changeGravity('right');
+                    break;
+            }
+        });
+        
+        // Start game
+        startBtn.addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            gameRunning = true;
+            initLevel(currentLevel);
+            gameLoop();
+        });
+        
+        // Initialize
+        document.getElementById('levelDisplay').textContent = currentLevel;
+        document.getElementById('livesDisplay').textContent = lives;
+        document.getElementById('scoreDisplay').textContent = score;
+    </script>
+</body>
+</html>
